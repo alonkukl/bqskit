@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import pickle
 from os import listdir
+from os import makedirs
 from os import mkdir
 from os.path import exists
 from re import findall
@@ -41,18 +42,13 @@ class SaveIntermediatePass(BasePass):
                 qasm for circuit blocks should be saved.
 
             project_name (str): Name of the project files.
-
-        Raises:
-            ValueError: If `path_to_save_dir` is not an existing directory.
         """
         if exists(path_to_save_dir):
             self.pathdir = path_to_save_dir
             if self.pathdir[-1] != '/':
                 self.pathdir += '/'
         else:
-            raise ValueError(
-                f'Path {path_to_save_dir} does not exist',
-            )
+            makedirs(path_to_save_dir, exist_ok=True)
         self.projname = project_name if project_name is not None \
             else 'unnamed_project'
 
