@@ -5,9 +5,7 @@ import logging
 from typing import Any
 
 import numpy as np
-from dask.distributed import get_client
-from dask.distributed import rejoin
-from dask.distributed import secede
+import ray
 from scipy.stats import linregress
 
 from bqskit.ir.circuit import Circuit
@@ -184,7 +182,6 @@ class LEAPSynthesisPass(SynthesisPass):
             return initial_layer
 
         if 'parallel' in data:  # In Parallel
-            client = get_client()
             while not frontier.empty():
                 top_circuit, layer = frontier.pop()
 
@@ -192,19 +189,15 @@ class LEAPSynthesisPass(SynthesisPass):
                 successors = self.layer_gen.gen_successors(top_circuit, data)
 
                 # Submit instantiate jobs
-                futures = client.map(
-                    Circuit.instantiate,
-                    successors,
-                    target=utry,
-                    parallel=True,
-                    **self.instantiate_options,
-                    pure=False,
-                )
-
-                # Wait for and gather results
-                secede()
-                circuits = client.gather(futures)
-                rejoin()
+                circuits = ray.get([
+                    Circuit.remote_instantiate.remote(
+                        successor,
+                        target=utry,
+                        parallel=True,
+                        **self.instantiate_options,
+                    )
+                    for successor in successors
+                ])
 
                 for circuit in circuits:
                     if self.evaluate_node(

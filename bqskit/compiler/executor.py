@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import ray
 from threadpoolctl import threadpool_limits
 
 from bqskit.compiler.task import CompilationTask
@@ -31,6 +32,7 @@ class Executor:
         self.data: dict[str, Any] = {'parallel': True}
         self.done = False
 
+    @ray.remote
     def run(self) -> tuple[Circuit, dict[str, Any]]:
         """Execute the task."""
         with threadpool_limits(limits=1):

@@ -5,9 +5,8 @@ import logging
 import uuid
 from typing import Any
 
-from dask.distributed import Client
-from dask.distributed import Future
-from dask.distributed import SpecCluster
+import ray
+from ray import ObjectRef
 
 from bqskit.compiler.executor import Executor
 from bqskit.compiler.task import CompilationTask
@@ -44,19 +43,8 @@ class Compiler:
             All arguments are passed directly to Dask. You can use
             these to connect to and configure a Dask cluster.
         """
-        if any(isinstance(arg, SpecCluster) for arg in args):
-            dask_options = {}
-        else:
-            dask_options = {
-                'silence_logs': logging.getLogger('bqskit').level,
-            }
-            if 'address' not in kwargs and 'scheduler_file' not in kwargs:
-                dask_options['threads_per_worker'] = 1
-
-        dask_options.update(kwargs)
-
-        self.client = Client(*args, **dask_options)
-        self.tasks: dict[uuid.UUID, Future] = {}
+        print(ray.init())
+        self.tasks: dict[uuid.UUID, ObjectRef] = {}
         _logger.info('Started compiler process.')
 
     def __enter__(self) -> Compiler:
@@ -78,18 +66,20 @@ class Compiler:
 
     def submit(self, task: CompilationTask) -> None:
         """Submit a CompilationTask to the Compiler."""
-        executor = self.client.scatter(Executor(task))
-        future = self.client.submit(Executor.run, executor, pure=False)
-        self.tasks[task.task_id] = future
+        executor = Executor(task)
+        self.tasks[task.task_id] = Executor.run.remote(executor)
         _logger.info('Submitted task: %s' % task.task_id)
 
     def status(self, task: CompilationTask) -> str:
         """Retrieve the status of the specified CompilationTask."""
-        return self.tasks[task.task_id].status
+        done, _ = ray.wait([self.tasks[task.task_id]], timeout = 0)
+        if len(done) == 1:
+            return "Finished"
+        return "Processing"
 
     def result(self, task: CompilationTask) -> Circuit:
         """Block until the CompilationTask is finished, return its result."""
-        circ = self.tasks[task.task_id].result()[0]
+        circ = ray.get(self.tasks[task.task_id])[0]
         return circ
 
     def cancel(self, task: CompilationTask) -> None:

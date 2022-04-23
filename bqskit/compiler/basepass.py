@@ -7,9 +7,7 @@ from typing import Any
 from typing import Callable
 from typing import TypeVar
 
-from distributed import get_client
-from distributed import rejoin
-from distributed import secede
+import ray
 
 from bqskit.compiler.machine import MachineModel
 from bqskit.ir.circuit import Circuit
@@ -39,6 +37,8 @@ class BasePass(abc.ABC):
     def name(self) -> str:
         """The name of the pass."""
         return self.__class__.__name__
+    
+    remote_fns = {}
 
     @abc.abstractmethod
     def run(self, circuit: Circuit, data: dict[str, Any] = {}) -> None:
@@ -136,15 +136,21 @@ class BasePass(abc.ABC):
         """Execute a function potentially in parallel."""
 
         if BasePass.in_parallel(data):
-            if fn == Circuit.instantiate:
-                kwargs['parallel'] = True
+            return []
+            # if fn == Circuit.instantiate:
+            #     kwargs['parallel'] = True
 
-            client = get_client()
-            futures = client.map(fn, *args, **kwargs)
-            secede()
-            results = client.gather(futures)
-            rejoin()
-            return results
+            # if fn not in BasePass.remote_fns:
+            #     BasePass.remote_fns[fn] = ray.remote(fn)
+
+            # fn = BasePass.remote_fns[fn]
+
+            # futures = fn.remote(*args, **kwargs)
+            
+            # secede()
+            # results = client.gather(futures)
+            # rejoin()
+            # return results
 
         else:
             if all(is_iterable(arg) for arg in args):

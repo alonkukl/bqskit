@@ -7,9 +7,7 @@ from typing import Any
 from typing import Callable
 from typing import Sequence
 
-from distributed import get_client
-from distributed import rejoin
-from distributed import secede
+import ray
 
 from bqskit.compiler.basepass import BasePass
 from bqskit.compiler.machine import MachineModel
@@ -161,24 +159,13 @@ class ForEachBlockPass(BasePass):
 
         # Perform Work
         if 'parallel' in data:  # In Parallel
-            client = get_client()
             completed_subcircuits = []
             completed_block_datas = []
-            subc_futures = client.scatter(subcircuits)
-            data_futures = client.scatter(block_datas)
-            futures = client.map(
-                _sub_do_work,
-                [self.loop_body] * len(subc_futures),
-                subc_futures,
-                data_futures,
-            )
-            secede()
-            client.gather(futures)
-            rejoin()
-            for future in futures:
-                x, y = future.result()
-                completed_subcircuits.append(x)
-                completed_block_datas.append(y)
+            
+            futures = [_sub_do_work.remote(self.loop_body, c, d) for c, d in zip(subcircuits, block_datas)]
+
+            completed_subcircuits, completed_block_datas = tuple(zip(*ray.get(futures)))
+
 
         else:  # Sequentially
             completed_subcircuits = []
@@ -242,6 +229,7 @@ def default_replace_filter(circuit: Circuit, op: Operation) -> bool:
     return True
 
 
+@ray.remote
 def _sub_do_work(
     loop_body: Sequence[BasePass],
     subcircuit: Circuit,

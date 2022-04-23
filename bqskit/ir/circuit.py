@@ -15,10 +15,9 @@ from typing import Set
 from typing import Tuple
 from typing import TYPE_CHECKING
 
+import ray
 import numpy as np
 import numpy.typing as npt
-from distributed import get_client
-from distributed import secede
 
 from bqskit.ir.gate import Gate
 from bqskit.ir.gates.circuitgate import CircuitGate
@@ -63,6 +62,24 @@ if TYPE_CHECKING:
     from bqskit.ir.opt.cost.function import CostFunction
 
 _logger = logging.getLogger(__name__)
+
+@ray.remote
+def single_start_instantiate(
+    instantiater: Instantiater,
+    circuit: Circuit,
+    target: UnitaryMatrix,
+    start: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    return instantiater.instantiate(circuit, target, start)
+
+@ray.remote
+def scoring_fn(
+    fn_gen: CostFunctionGenerator,
+    circuit: Circuit,
+    target: UnitaryMatrix,
+    params: npt.NDArray[np.float64],
+) -> float:
+    return fn_gen.gen_cost(circuit, target).get_cost(params)
 
 
 class Circuit(DifferentiableUnitary, StateVectorMap, Collection[Operation]):
@@ -2371,52 +2388,30 @@ class Circuit(DifferentiableUnitary, StateVectorMap, Collection[Operation]):
 
         # Instantiate the circuit
         if parallel and multistarts > 1:
-            client = get_client()
 
-            def single_start_instantiate(
-                instantiater: Instantiater,
-                circuit: Circuit,
-                target: UnitaryMatrix,
-                start: npt.NDArray[np.float64],
-            ) -> npt.NDArray[np.float64]:
-                return instantiater.instantiate(circuit, target, start)
+            param_futures = [
+                single_start_instantiate.remote(
+                    instantiater,
+                    self,
+                    target,
+                    start,
+                )
+                for start in starts
+            ]
 
-            def scoring_fn(
-                fn_gen: CostFunctionGenerator,
-                circuit: Circuit,
-                target: UnitaryMatrix,
-                params: npt.NDArray[np.float64],
-            ) -> float:
-                return fn_gen.gen_cost(circuit, target).get_cost(params)
+            score_futures = [
+                scoring_fn.remote(
+                    score_fn_gen,
+                    self,
+                    target,
+                    param,
+                )
+                for param in param_futures
+            ]
 
-            param_futures = client.map(
-                single_start_instantiate,
-                [instantiater] * multistarts,
-                [self] * multistarts,
-                [target] * multistarts,
-                starts,
-                pure=False,
-            )
-
-            score_futures = client.map(
-                scoring_fn,
-                [score_fn_gen] * multistarts,
-                [self] * multistarts,
-                [target] * multistarts,
-                param_futures,
-                pure=False,
-            )
-
-            # We only want to secede on worker threads, so try to recover if
-            # Circuit.instantiate is called from the main thread
-            try:
-                secede()
-            except ValueError:
-                pass
-
-            scores = client.gather(score_futures)
+            scores = ray.get(score_futures)
             best_index = scores.index(min(scores))
-            params = param_futures[best_index].result()
+            params = ray.get(param_futures[best_index])
 
         else:
             params_list = [
@@ -2428,6 +2423,8 @@ class Circuit(DifferentiableUnitary, StateVectorMap, Collection[Operation]):
         # Return best result
         self.set_params(params)
         return self
+    
+    remote_instantiate = ray.remote(instantiate)
 
     def minimize(self, cost: CostFunction, **kwargs: Any) -> None:
         """
