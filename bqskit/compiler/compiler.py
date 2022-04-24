@@ -58,7 +58,7 @@ class Compiler:
     def close(self) -> None:
         """Shutdown compiler."""
         try:
-            self.client.close()
+            ray.shutdown()
             self.tasks = {}
             _logger.info('Stopped compiler process.')
         except (AttributeError, TypeError):
