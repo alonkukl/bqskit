@@ -43,7 +43,7 @@ class Compiler:
             All arguments are passed directly to Dask. You can use
             these to connect to and configure a Dask cluster.
         """
-        print(ray.init())
+        ray.init()
         self.tasks: dict[uuid.UUID, ObjectRef] = {}
         _logger.info('Started compiler process.')
 
