@@ -136,21 +136,22 @@ class BasePass(abc.ABC):
         """Execute a function potentially in parallel."""
 
         if BasePass.in_parallel(data):
-            return []
-            # if fn == Circuit.instantiate:
-            #     kwargs['parallel'] = True
+            if fn == Circuit.instantiate:
+                kwargs['parallel'] = True
 
-            # if fn not in BasePass.remote_fns:
-            #     BasePass.remote_fns[fn] = ray.remote(fn)
+            if fn not in BasePass.remote_fns:
+                BasePass.remote_fns[fn] = ray.remote(fn)
 
-            # fn = BasePass.remote_fns[fn]
+            fn = BasePass.remote_fns[fn]
 
-            # futures = fn.remote(*args, **kwargs)
+            if all(is_iterable(arg) for arg in args):
+                if all(len(arg) == len(args[0]) for arg in args):
+                    return ray.get([
+                        fn.remote(*subargs, **kwargs)
+                        for subargs in zip(*args)
+                    ])
             
-            # secede()
-            # results = client.gather(futures)
-            # rejoin()
-            # return results
+            return ray.get([fn.remote(*args, **kwargs)])
 
         else:
             if all(is_iterable(arg) for arg in args):
