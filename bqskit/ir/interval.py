@@ -81,12 +81,12 @@ class CycleInterval(Tuple[int, int]):
 
         if lower > upper:
             raise ValueError(
-                'Expected lower to be <= upper, got {lower} <= {upper}.',
+                f'Expected lower to be <= upper, got {lower} <= {upper}.',
             )
 
         if lower < 0:
             raise ValueError(
-                'Expected positive integers, got {lower} and {upper}.',
+                f'Expected positive integers, got {lower} and {upper}.',
             )
 
         return super().__new__(cls, (lower, upper))  # type: ignore

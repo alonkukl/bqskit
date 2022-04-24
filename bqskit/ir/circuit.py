@@ -1530,13 +1530,16 @@ class Circuit(DifferentiableUnitary, StateVectorMap, Collection[Operation]):
         })
         return region, net_new_cycles, shadow_region
 
-    def fold(self, region: CircuitRegionLike) -> None:
+    def fold(self, region: CircuitRegionLike) -> CircuitPoint:
         """
         Fold the specified `region` into a CircuitGate.
 
         Args:
             region (CircuitRegionLike): The region to fold into a
                 CircuitGate.
+        
+        Returns:
+            (CircuitPoint): The point where the new folded gate exists.
 
         Raises:
             ValueError: If `region` is invalid or cannot be straightened.
@@ -1564,6 +1567,7 @@ class Circuit(DifferentiableUnitary, StateVectorMap, Collection[Operation]):
             sorted(list(region.keys())),
             list(circuit.params),
         )
+        return CircuitPoint(region.min_cycle, region.min_qudit)
 
     def unfold(self, point: CircuitPointLike) -> None:
         """Unfold the CircuitGate at `point` into the circuit."""
