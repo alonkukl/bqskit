@@ -59,7 +59,7 @@ batched_instantiation = QFactor_jax_batched_jit(diff_tol_r=diff_tol_r, diff_tol_
 
 instantiator_operated_on_u3s = False
 
-if instantiator == 'QFACTOR-RUST':
+if 'QFACTOR-RUST' in instantiator:
 
     instantiate_options={
                 'method': 'QFactor',
@@ -78,7 +78,7 @@ elif instantiator == 'QFACTOR-JAX':
                     'multistarts': num_multistarts,
                     'seed': seed,
                 }
-elif instantiator == 'LBFGS':
+elif  'LBFGS' in instantiator:
         instantiator_operated_on_u3s = True
         instantiate_options={
             'method':'minimization',
@@ -93,7 +93,7 @@ else:
                     'seed': seed,
                 }
 
-
+instantiate_options['_P'] = "_P" in instantiator
 
 in_circuit = Circuit.from_file(file_path)
 

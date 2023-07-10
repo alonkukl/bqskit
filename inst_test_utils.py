@@ -75,7 +75,7 @@ class SlurmSubmissionsDb():
     @staticmethod
     def _retrive_job_running_status(jobid):
 
-        command = f"sacct -j {jobid} | grep gpu_ss1 | awk '{{print $6}}'"
+        command = f"sacct -j {jobid} | grep -e '{jobid}\s' | awk '{{print $6}}'"
         process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, error = process.communicate()
 
@@ -100,7 +100,7 @@ class SlurmSubmissionsDb():
 
     def get_submission(self, name):
         record = self._pd[name]
-        
+
         if record['is_done']:
             return record
         
@@ -118,11 +118,81 @@ class SlurmSubmissionsDb():
             record['inst_succsed'] = False
             record['is_done'] = True            
         
+
+        self._pd[name] = record
+
         return record
 
-    def get_all_submissions(self):
-        for key in self._pd:
-            yield self.get_submission(key)
+    def get_all_submissions(self, sub_key_to_look_for=None):
+        if sub_key_to_look_for != None:
+            for key in self._pd:            
+                if sub_key_to_look_for in key:
+                    yield self.get_submission(key)
+        else:
+            for key in self._pd:            
+                yield self.get_submission(key)
 
     def exists(self, name):
         return name in self._pd
+    
+
+class SlurmCircuitSynthSubmissionsDb(SlurmSubmissionsDb):
+
+
+    def add_submission(self, name, partition_size, num_multistarts,  orig_circ_name, inst_name, slurm_job_id, slurm_log_file_path, node_count, gpu_count, time_limit):
+
+        d = {
+            'orig_circ_name': orig_circ_name,
+            'inst_name': inst_name,
+            'slurm_job_id':slurm_job_id,
+            'slurm_log_file_path':slurm_log_file_path,
+            'partition_size': partition_size,
+            'node_count':node_count, 
+            'gpu_count': gpu_count,
+            'time_limit': time_limit,
+            'num_multistarts': num_multistarts,
+            'submit time':time.ctime(),
+            'is_done':False}
+        self._pd[name] = d
+
+
+    def get_submission(self, name):
+        record = self._pd[name]
+        return record
+        
+        if record['is_done']:
+            return record
+        
+        jobid = record['slurm_job_id']
+        job_status = SlurmSubmissionsDb._retrive_job_running_status(jobid)
+        record['job_status'] = job_status
+
+        if job_status == 'COMPLETED':
+            run_res = SlurmCircuitSynthSubmissionsDb._parse_slurm_log(record['slurm_log_file_path'])
+            if len(run_res) == 3:
+                compile_time, one_qgate_count, two_qgate_count = run_res
+                record['compile_time'] = compile_time
+                record['one_qgate_count'] = one_qgate_count
+                record['two_qgate_count'] = two_qgate_count
+                record['error_parsig_log'] = False
+            else:
+                record['error_parsig_log'] = True
+
+            record['is_done'] = True
+
+        elif job_status in ['TIMEOUT', 'OUT_OF_ME+']:
+            record['is_done'] = True            
+        
+        self._pd[name] = record
+        return record
+    
+    @staticmethod
+    def _parse_slurm_log(path_to_log):
+
+        command = f"grep '^True,' {path_to_log} |  cut -d, -f7,8,9"
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output, error = process.communicate()
+
+        if error:
+            print(f"Error occurred: {error}")
+        return output.decode('utf-8').strip().split(',')

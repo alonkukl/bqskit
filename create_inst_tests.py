@@ -12,7 +12,7 @@ random.seed(314)
 i_range = range(3, 13)
 
 # set the number of files to randomly choose from each directory
-num_files = 5
+num_files = 10
 
 # create an empty dictionary to store the chosen files
 chosen_files = {}
@@ -56,7 +56,7 @@ print(chosen_files)
 #%%
 
 import json
-with open('test_partitions.json', 'w') as f:
+with open('test_partitions_10_rand.json', 'w') as f:
     json.dump(chosen_files, f)
 
 

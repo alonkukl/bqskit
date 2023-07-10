@@ -2,6 +2,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 
 filename = './del_gates_4_3.csv'
@@ -9,15 +10,21 @@ filename = './del_gates_4_5.csv'
 filename = './del_gates_4_7.csv'
 filename = './del_gates_4_10.csv'
 filename = './del_gates_4_12.csv'
+filename = './big_run2.csv'
+# filename = './qce23_small_circ.csv'
+filename = './all_stats_no_qaoa12.csv'
 
 
 orig_circuits_props = {
                 'hub4.qasm'       :{'1Q_COUNT': 155,  '2Q_COUNT':180},
                 'qaoa5.qasm'      :{'1Q_COUNT': 27,   '2Q_COUNT':42},
                 'grover5_u3.qasm' :{'1Q_COUNT': 80,   '2Q_COUNT':48},
+                'grover5.qasm' :{'1Q_COUNT': 80,   '2Q_COUNT':48},
                 'adder9_u3.qasm'  :{'1Q_COUNT': 64,   '2Q_COUNT':98},
+                'adder9.qasm'  :{'1Q_COUNT': 64,   '2Q_COUNT':98},
                 'hub18.qasm'      :{'1Q_COUNT': 1992, '2Q_COUNT':3541},
                 'adder63_u3.qasm' :{'1Q_COUNT': 2885, '2Q_COUNT':1405},
+                'adder63.qasm' :{'1Q_COUNT': 2885, '2Q_COUNT':1405},
                 'shor26.qasm'     :{'1Q_COUNT': 20896,'2Q_COUNT':21072},
 
                 'add17.qasm'     :{'1Q_COUNT': 348,'2Q_COUNT':232},
@@ -70,12 +77,22 @@ for q in [1,2]:
         data.at[index, f'{q}Q_REDUCTION'] = reduction
     data[f'{q}Q_REDUCTION'] = data[f'{q}Q_REDUCTION'].astype('float64')
 
+data[f'GATES_REDUCTION'] = None
+for index, row in data.iterrows():
+    file_name = row['FILE_NAME']    
+    base_line = sum(orig_circuits_props[file_name][f'{q}Q_COUNT'] for q in [1,2])
+
+    reduction = 100 * (base_line - sum(row[f'{q}Q_COUNT'] for q in [1,2]))/base_line
+    data.at[index, f'GATES_REDUCTION'] = reduction
+data[f'GATES_REDUCTION'] = data[f'GATES_REDUCTION'].astype('float64')
+
 # Group the data by FILE_NAME, INST, and PARTITION_SIZE, and compute the mean of the RUNTIME column
-grouped_data = data.groupby(['FILE_NAME', 'INST', 'PARTITION_SIZE'], as_index=False)['RUNTIME', '2Q_COUNT', '1Q_COUNT', '1Q_REDUCTION', '2Q_REDUCTION'].mean()
+grouped_data = data.groupby(['FILE_NAME', 'INST', 'PARTITION_SIZE'], as_index=False)['RUNTIME', '2Q_COUNT', '1Q_COUNT', '1Q_REDUCTION', '2Q_REDUCTION', 'GATES_REDUCTION'].mean()
 #%%
 # Loop through each unique FILE_NAME
 for file_name in grouped_data['FILE_NAME'].unique():
-    if file_name in ['heisenberg8.qasm']:
+    # if 'tfim' in file_name in ['heisenberg8.qasm']:
+    if not 'qae' in file_name:
         continue
     # Subset the data for the current FILE_NAME
     file_data = grouped_data[grouped_data['FILE_NAME'] == file_name]
@@ -166,14 +183,10 @@ for file_name in grouped_data['FILE_NAME'].unique():
                     # weight='bold',
                     )
 
-
         ax.set_xlabel('Partition Size')
-
-
 
         ax.legend()
         
-
   
         if q==1:
             ax.set_title(f'U3 Reduction in {circuit_name}')
@@ -260,3 +273,274 @@ for file_name in grouped_data['FILE_NAME'].unique():
 #     plt.show()    
 
 # # %%
+
+# %%
+max_2q_reduction_index = [d.idxmax() for g,d in data.groupby(['FILE_NAME', 'INST', 'PARTITION_SIZE'], as_index=False)['2Q_REDUCTION']]
+max_2q_reduction_rows = data.loc[max_2q_reduction_index]
+
+inst_partition_mean_2q_reduction = max_2q_reduction_rows.groupby(['INST', 'PARTITION_SIZE'])['2Q_REDUCTION'].mean()
+inst_partition_mean_1q_reduction = max_2q_reduction_rows.groupby(['INST', 'PARTITION_SIZE'])['1Q_REDUCTION'].mean()
+
+all_jobs_filename = 'all_submitted_jobs.csv'
+all_jobs_filename = 'all_submitted_jobs_may_2nd.csv'
+jobs_df = pd.read_csv(all_jobs_filename, delimiter='_', names=['Circuit', 'Partition size', 'Instantiator'])
+
+jobs_set = {'CERES_P':{}, 'LBFGS_P':{}, 'QFACTOR-RUST_P':{}, 'QFACTOR-JAX':{}}
+for name, d in jobs_df.groupby(['Partition size', 'Instantiator']):
+    size = int(name[0][:-1])
+    inst = name[1]
+    if not 'JAX'  in inst:
+        inst += '_P'
+    jobs_set[inst][size] = set(d['Circuit'].unique())
+    
+    
+intersec = set()
+for p_s, qf_s in jobs_set['QFACTOR-JAX'].items():
+    if p_s in jobs_set['CERES_P']:
+        c_s = jobs_set['CERES_P'][p_s]
+        intersec = intersec.union(c_s.intersection(qf_s))
+
+
+
+# %%
+
+
+sns.lineplot(data=inst_partition_mean_2q_reduction.reset_index(), x= 'PARTITION_SIZE', y='2Q_REDUCTION', hue='INST')
+plt.savefig('all_data_2q_reduction.pdf', bbox_inches='tight')
+#%%
+sns.lineplot(data=inst_partition_mean_1q_reduction.reset_index(), x= 'PARTITION_SIZE', y='1Q_REDUCTION', hue='INST')
+plt.savefig('all_data_1q_reduction.pdf', bbox_inches='tight')
+# %%
+
+
+# max_2q_reduction_index = [d.idxmax() for g,d in data.groupby(['FILE_NAME', 'PARTITION_SIZE'], as_index=False)['2Q_REDUCTION']]
+
+# max_2q_reduction_rows = data.loc[max_2q_reduction_index]
+
+# inst_partition_mean_2q_reduction = max_2q_reduction_rows.groupby(['PARTITION_SIZE'])['2Q_REDUCTION'].mean()
+# inst_partition_mean_1q_reduction = max_2q_reduction_rows.groupby(['PARTITION_SIZE'])['1Q_REDUCTION'].mean()
+
+# sns.lineplot(data=inst_partition_mean_2q_reduction.reset_index(), x= 'PARTITION_SIZE', y='2Q_REDUCTION', label='CNOT')
+# sns.lineplot(data=inst_partition_mean_1q_reduction.reset_index(), x= 'PARTITION_SIZE', y='1Q_REDUCTION', label='U3')
+
+# %%
+
+possible_insts = set(['QFACTOR-JAX', 'QFACTOR-RUST_P', 'CERES_P', 'LBFGS_P'])
+possible_insts = set(['QFACTOR-JAX',  'CERES_P'])
+
+gates_reduction_sum = {}
+
+for low,high in [(3,9), (10, 35), (36, 1000)]:
+    gates_reduction_sum[(low,high)] = {i:{} for i in possible_insts}
+
+    for g,d in max_2q_reduction_rows[['INST' ,'FILE_NAME', 'PARTITION_SIZE', '1Q_REDUCTION' ,'2Q_REDUCTION', 'QUBIT_COUNT', 'GATES_REDUCTION']].groupby(['FILE_NAME' ,'PARTITION_SIZE']):
+        file, par = g
+        if not file.split('.')[0] in intersec:
+            continue
+        if d['QUBIT_COUNT'].iloc[0]<low or  d['QUBIT_COUNT'].iloc[0]>high:
+            continue
+        for inst, inst_data in d.groupby('INST'):
+            if not inst in possible_insts:
+                continue
+            dinst = gates_reduction_sum[(low,high)][inst].get(par, {'U3':0, 'CNOT':0, 'amount':0, 'Gates':0, 'Finished':0})
+            dinst['amount'] += 1
+            dinst['U3'] +=float(inst_data['1Q_REDUCTION'])
+            dinst['CNOT'] +=float(inst_data['2Q_REDUCTION'])
+            dinst['Gates'] += float(inst_data['GATES_REDUCTION'])
+            dinst['Finished'] += 1
+            # if 'JAX' in inst and par==3:
+            #     print(file)
+        
+            gates_reduction_sum[(low,high)][inst][par]= dinst
+        for inst in possible_insts-set(d.INST.unique()):
+            # if 'JAX' in inst and par==3:
+            #     print(file)
+            # if data[(data['INST']==inst) & (data['FILE_NAME'] == file)].size == 0:
+                # print(inst, file, par)
+                # continue
+            dinst = gates_reduction_sum[(low,high)][inst].get(par, {'U3':0, 'CNOT':0, 'amount':0, 'Gates':0, 'Finished':0})
+            dinst['amount'] += 1
+            gates_reduction_sum[(low,high)][inst][par]= dinst
+
+gates_reduction_avg = []
+
+for k in gates_reduction_sum.keys():
+    
+    for inst in gates_reduction_sum[k].keys():
+        for par, d in gates_reduction_sum[k][inst].items():
+            u3_sum = d['U3']
+            cnot_sum = d['CNOT']
+            gates_sum = d['Gates']
+            amount_sum = d['amount']
+            fin_amount = d['Finished']
+            gates_reduction_avg.append({'Compliation rate':f'{fin_amount}/{amount_sum}','Qubit range':k ,'Instantiator':inst, 'Parition size':par, 'U3 reduction [%]':u3_sum/amount_sum, 'CNOT reduction [%]':cnot_sum/amount_sum, 'Total gates reduction [%]':gates_sum/amount_sum})
+
+
+gates_reduction_df = pd.DataFrame(gates_reduction_avg)
+
+# %%
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# create the line plot
+plot = sns.lineplot(data=gates_reduction_df, x='Parition size', y='U3 reduction [%]', style='Instantiator', hue='Qubit range', legend='full')
+
+# customize the plot
+
+handles, labels = plot.get_legend_handles_labels()
+labels = labels[-7:]
+handles = handles[-7:]
+labels[6] = 'QF-JAX'
+plot.legend(handles, labels, loc='center right' )
+plot.set_xticks(gates_reduction_df['Parition size'].astype(int))
+# plot2= sns.scatterplot(data=gates_reduction_df, x='PARTITION_SIZE', y='U3_reduction',  style='INST', hue='Qubit range', markers=True, ax=plot, legend=False)
+
+# show the plot
+# plt.show()
+
+# sns.lineplot(data=gates_reduction_df, x='PARTITION_SIZE', y='U3_reduction', hue='INST')
+plt.savefig('all_data_1q_reduction_per_circuit_qubits.pdf', bbox_inches='tight')
+# %%
+plot = sns.lineplot(data=gates_reduction_df, x='Parition size', y='CNOT reduction [%]',   style='Instantiator', hue='Qubit range')
+# customize the plot
+
+# sns.scatterplot(data=gates_reduction_df, x='PARTITION_SIZE', y='CNOT_reduction',  hue=['INST', 'Qubit range'], markers=True, ax=plot, legend=False)
+handles, labels = plot.get_legend_handles_labels()
+labels = labels[-7:]
+handles = handles[-7:]
+labels[6] = 'QF-JAX'
+plot.legend(handles, labels, loc='upper left' )
+plot.set_xticks(gates_reduction_df['Parition size'].astype(int))
+
+# show the plot
+# plt.show()
+
+plt.savefig('all_data_2q_reduction_per_circuit_qubits.pdf', bbox_inches='tight')
+
+
+#%%
+for inst, d in gates_reduction_df.groupby('Instantiator'):
+    plt.figure()
+    plot = sns.lineplot(data=d, x='Parition size', y='Total gates reduction [%]',   hue='Qubit range')
+    plot.set(ylabel=f'Total gates reduction [%]')
+    plot.set(title=inst)
+    plot.set(ylim=(0,55))
+    for _, row in d.iterrows():
+        x, y = row['Parition size'], row['Total gates reduction [%]']
+        if row['Qubit range'][0] == 3:
+            # if x!= 3 and x!= 9:
+            #     continue
+            if inst == 'QFACTOR-JAX':
+                yoffset = -10 if(x!=3) else 5
+            else:
+                yoffset = -10 if(x==4) else 5
+        elif row['Qubit range'][0] == 10:
+            if 'CERES_P' == inst:
+                yoffset = -10 if x==7 else 7
+            else:
+                yoffset = -10
+            # if x!= 3 and x!= 7:
+            #     continue
+
+        elif row['Qubit range'][0] == 36:
+            yoffset = 7
+            # if x!= 3 and x!= 7:
+            #     continue
+
+        label = f"{row['Compliation rate']}"
+
+        plt.annotate(label, xy=(x, y), xytext=(-8, yoffset), textcoords='offset points')
+    
+    # for i, row in d.iterrows():
+    #     x = row['Parition size']
+    #     y = row['Total gates reduction [%]']
+    #     cr = row['Compliation rate']
+    #     plt.text(x, y, f"{cr}", horizontalalignment='center', verticalalignment='bottom')
+    
+    plt.savefig(f'{inst}_total_gates_reduction_in_buckets.pdf', bbox_inches='tight')
+
+# %%
+
+
+
+possible_insts = set(['QFACTOR-JAX', 'QFACTOR-RUST_P', 'CERES_P', 'LBFGS_P'])
+# possible_insts = set(['QFACTOR-JAX',  'CERES_P'])
+
+gates_reduction_sum = {i:{} for i in possible_insts}
+
+for g,d in max_2q_reduction_rows[['INST' ,'FILE_NAME', 'PARTITION_SIZE', '1Q_REDUCTION' ,'2Q_REDUCTION', 'QUBIT_COUNT']].groupby(['FILE_NAME' ,'PARTITION_SIZE']):
+    file, par = g
+    if not file.split('.')[0] in intersec:
+            continue
+    # if d['QUBIT_COUNT'].iloc[0]<low or  d['QUBIT_COUNT'].iloc[0]>high:
+    #     continue
+    for inst, inst_data in d.groupby('INST'):
+        
+        if not inst in possible_insts:
+            continue
+        dinst = gates_reduction_sum[inst].get(par, {'U3':0, 'CNOT':0, 'amount':0})
+        dinst['amount'] += 1
+        dinst['U3'] +=float(inst_data['1Q_REDUCTION'])
+        dinst['CNOT'] +=float(inst_data['2Q_REDUCTION'])
+        gates_reduction_sum[inst][par]= dinst
+    for inst in possible_insts-set(d.INST.unique()):
+        if data[(data['INST']==inst) & (data['FILE_NAME'] == file)].size == 0:
+            continue
+        dinst = gates_reduction_sum[inst].get(par, {'U3':0, 'CNOT':0, 'amount':0})
+        dinst['amount'] += 1
+        gates_reduction_sum[inst][par]= dinst
+
+gates_reduction_avg = []
+
+    
+for inst in gates_reduction_sum.keys():
+    for par, d in gates_reduction_sum[inst].items():
+        u3_sum = d['U3']
+        cnot_sum = d['CNOT']
+        amount_sum = d['amount']
+        gates_reduction_avg.append({'Instantiator':inst, 'Parition size':par, 'U3 reduction [%]':u3_sum/amount_sum, 'CNOT reduction [%]':cnot_sum/amount_sum})
+
+
+gates_reduction_df = pd.DataFrame(gates_reduction_avg)
+
+# %%
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# create the line plot
+plot = sns.lineplot(data=gates_reduction_df, x='Parition size', y='U3 reduction [%]', hue='Instantiator', legend='full')
+
+# customize the plot
+
+handles, labels = plot.get_legend_handles_labels()
+labels = [l.replace("QFACTOR", 'QF') for l in labels]
+plot.legend(handles=handles ,labels=labels)
+# plot.set(ylabel='U3 reduction [%]')
+plot.set_xticks(gates_reduction_df['Parition size'].astype(int))
+# plot.set(xlabel='Partition size')
+# plot2= sns.scatterplot(data=gates_reduction_df, x='PARTITION_SIZE', y='U3_reduction',  style='INST', hue='Qubit range', markers=True, ax=plot, legend=False)
+
+# show the plot
+# plt.show()
+
+# sns.lineplot(data=gates_reduction_df, x='PARTITION_SIZE', y='U3_reduction', hue='INST')
+plt.savefig('all_data_1q_reduction.pdf', bbox_inches='tight')
+# %%
+plot = sns.lineplot(data=gates_reduction_df, x='Parition size', y='CNOT reduction [%]',   hue='Instantiator')
+# customize the plot
+
+handles, labels = plot.get_legend_handles_labels()
+labels = [l.replace("QFACTOR", 'QF') for l in labels]
+plot.legend(handles=handles ,labels=labels)
+
+plot.set_xticks(gates_reduction_df['Parition size'].astype(int))
+
+
+# show the plot
+# plt.show()
+
+plt.savefig('all_data_2q_reduction.pdf', bbox_inches='tight')
+
+# %%
+
+# %%

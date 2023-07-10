@@ -9,15 +9,15 @@ global_i = 0
 
 detached_runtime_header="""#!/bin/bash
 #SBATCH --job-name=syn{i}_{cir_name}_{instantiator}_detached_runtime
-#SBATCH -A m4141_g
-#SBATCH -C gpu
+#SBATCH -A {account}
+#SBATCH -C {constraint}
 #SBATCH -q regular
-#SBATCH -t 11:55:00
+#SBATCH -t {time_limit}
 #SBATCH -n {nodes}
 #SBATCH --mem=0
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-task={amount_of_gpus_per_node}
-#SBATCH --output=./logs_tol_a_0/{cir_name}_{partitions_size}p_{instantiator}_detached_runtime_{nodes}_nodes_{num_multistarts}_starts-%j.txt
+#SBATCH --output=./logs_qce_more_runs/{cir_name}_{partitions_size}p_{instantiator}_detached_runtime_{nodes}_nodes_{num_multistarts}_starts-%j.txt
 
 
 #sdfsgTCH --output=./logs_qfactor_jax_new_termination_cond/{cir_name}_{partitions_size}p_{instantiator}_detached_runtime_{nodes}_nodes_{num_multistarts}_starts-%j.txt
@@ -69,15 +69,15 @@ sleep 2
 
 attached_runtime_header="""#!/bin/bash
 #SBATCH --job-name=syn{i}_{cir_name}_{instantiator}_attached_runtime
-#SBATCH -A m4141_g
-#SBATCH -C gpu
+#SBATCH -A {account}
+#SBATCH -C {constraint}
 #SBATCH -q regular
-#SBATCH -t 11:55:00
+#SBATCH -t {time_limit}
 #SBATCH -n {nodes}
 #SBATCH --mem=0
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-task={amount_of_gpus_per_node}
-#SBATCH --output=./logs_tol_a_0/{cir_name}_{partitions_size}p_{instantiator}_attached_runtime_{nodes}_nodes_{num_multistarts}_starts-%j.txt
+#SBATCH --output=./logs_qce_more_runs/{cir_name}_{partitions_size}p_{instantiator}_attached_runtime_{nodes}_nodes_{num_multistarts}_starts-%j.txt
 
 
 
@@ -109,7 +109,7 @@ echo quit | nvidia-cuda-mps-control
 
 def create_and_run_a_job(cir_path, partitions_size, python_file,
         instantiator, num_multistarts, seed, nodes, workers_per_node,
-        amount_of_gpus_per_node, use_detached):
+        amount_of_gpus_per_node, use_detached, time_limit):
     
     global global_i
 
@@ -150,15 +150,21 @@ def create_and_run_a_job(cir_path, partitions_size, python_file,
         header_to_use = attached_runtime_header
 
     cir_name = cir_path.split("/")[-1].split(".qasm")[0]
+    account = 'm4141'
+    if 'JAX' in instantiator:
+        account+='_g'
+        constarint = 'gpu'
+    else:
+        constarint = 'cpu'
     to_write.write(header_to_use.format(i=global_i,
                         cir_name=cir_name, instantiator=instantiator,
-                         partitions_size=partitions_size, 
-                        num_multistarts=num_multistarts, 
+                         partitions_size=partitions_size, account=account,
+                        num_multistarts=num_multistarts, time_limit=time_limit,
                         env_vars=env_vars, command_args=command_args,
                         nodes = nodes, amount_of_gpus_per_node=amount_of_gpus_per_node,
                         workers_per_node=workers_per_node, python_file=python_file,
-                        runtime_type=runtime_type,
-                                        amount_of_workers_per_gpu=amount_of_workers_per_gpu))
+                        runtime_type=runtime_type,constraint=constarint,
+                        amount_of_workers_per_gpu=amount_of_workers_per_gpu))
 
     to_write.close()
     time.sleep(2*sleep_time)
@@ -172,41 +178,70 @@ if __name__ == '__main__':
 
     # circuits =  [f'{f}.qasm' for f in ['qaoa10_u3', 'qaoa12_u3', 'mul10_u3']]
 
-    # circuits =  [('qaoa5.qasm', 5), ('grover5_u3.qasm', 5), ('adder9_u3.qasm', 9), ('hub4.qasm', 4)]
+    # circuits =  [('qaoa5.qasm', 5), ('grover5.qasm', 5), ('adder9.qasm', 9), ('hub4.qasm', 4)]
+    # circuits =  [('qaoa5.qasm', 5), ('grover5.qasm', 5), ('adder9.qasm', 9)]
+    # circuits =  [('qaoa5.qasm', 5), ('grover5.qasm', 5)]
     # circuits =  [ ('qaoa12_u3.qasm', 12)]
     # circuits =  [ ('adder63_u3.qasm', 63), ('shor26.qasm', 26), ('hub18.qasm', 18)]
     # circuits =  [ ('adder63_u3.qasm', 63)]
     # circuits = [ ('tfim8.qasm', 8), ('tfim16.qasm', 16), ('qpe8.qasm', 8), ('qpe10.qasm', 10), ('qpe12.qasm', 12), ('hhl8.qasm', 8),  ('heisenberg8.qasm', 8),   ('heisenberg7.qasm', 7), ('qae11.qasm', 11), ('qae13.qasm', 13)]
-    circuits = [('qae11.qasm', 11), ('qae13.qasm', 13)]
+    # circuits = [('qae11.qasm', 11), ('qae13.qasm', 13)]
+    # circuits = [('qpe12.qasm', 12)]
+    # circuits = [ ('vqe14.qasm', 14)]
     # circuits =  [ ('shor64.qasm', 64), ('qae33.qasm', 33), ('qae81.qasm', 81), ('mult64.qasm', 64), ('mult16.qasm', 16), ('heisenberg64.qasm', 64),  ('add17.qasm', 17), ('tfim400.qasm', 400)]
     # circuits =  [ ('vqe12.qasm', 12), ('vqe14.qasm', 14), ('qae33.qasm', 33), ('qae81.qasm', 81), ('mult64.qasm', 64), ('mult16.qasm', 16), ('heisenberg64.qasm', 64),  ('add17.qasm', 17)]
     # circuits =  [ ('qae33.qasm', 33), ('qae81.qasm', 81)]
     # circuits =  [ ('hub4.qasm', 4)]
-    # circuits =  [ ('tfim16.qasm', 16)]
-    # circuits =  [ ('hub18.qasm', 18)]
+    # circuits =  [ ('mult16.qasm', 16)]
+    # circuits = [('add17.qasm', 17)]
+
+    # circuits =  [ ('hhl8.qasm', 8)]
     # circuits =  [ ('shor26.qasm', 26)]
-    # circuits =  [ ('grover5_u3.qasm', 5)]
     # circuits =  [ ('qaoa5.qasm', 5)]
-    # circuits =  [ ('adder9_u3.qasm', 9)]
+    # circuits =  [ ('qaoa5.qasm', 5)]
+    # circuits = [('hhl8.qasm', 8),]
+    # circuits =  [ ('adder9.qasm', 9)]
     # circuits = [('hhl8.qasm', 8)]
-    # circuits = [('heisenberg7.qasm', 7)]
-    # circuits = [('heisenberg64.qasm', 64)]
+    circuits = [('heisenberg64.qasm', 64)]
+    # circuits = [('mult64.qasm', 64)]
+
+
+# ['QFACTOR-JAX', ] heisenberg7.qasm V
+# ['QFACTOR-JAX', ] heisenberg8.qasm V
+# ['QFACTOR-JAX', ] hub18.qasm V 
+# ['QFACTOR-JAX', ] hub4.qasm V
+# ['QFACTOR-JAX'] mult64.qasm V
+# ['QFACTOR-JAX'] qae33.qasm V
+# ['QFACTOR-JAX'] qae81.qasm V
+# ['QFACTOR-JAX', ] qpe10.qasm V
+# ['QFACTOR-JAX', ] qpe8.qasm V
+# ['QFACTOR-JAX', ] tfim8.qasm V
+# ['QFACTOR-JAX', ] vqe14.qasm V
+
+
+# ['CERES_P', 'LBFGS_P', 'QFACTOR-RUST_P'] hhl8.qasm
+# ['CERES_P', 'LBFGS_P', 'QFACTOR-RUST_P'] qpe12.qasm
     
     # instantiators = ['CERES', 'QFACTOR-RUST', 'LBFGS']
     # instantiators = ['CERES', 'QFACTOR-RUST', 'QFACTOR-JAX', 'LBFGS']
     # instantiators = ['CERES', 'QFACTOR-RUST', 'QFACTOR-JAX']
     # instantiators = ['CERES', 'QFACTOR-RUST',  'LBFGS']
+    instantiators = ['CERES_P', 'QFACTOR-RUST_P',  'LBFGS_P']
     # instantiators = ['CERES', 'QFACTOR-RUST']
     # instantiators = ['CERES', 'QFACTOR-JAX']
     # instantiators = ['CERES']
-    instantiators = ['QFACTOR-JAX']
+    # instantiators = ['QFACTOR-JAX']
     # instantiators = ['QFACTOR-RUST']
     # instantiators = ['QFACTOR-RUST', 'LBFGS']
     # instantiators = ['CERES', 'LBFGS']
+    # instantiators = ['CERES', 'CERES_P']
+    # instantiators = ['CERES_P']
     # instantiators = ['LBFGS']
 
-    partisions_size_l = [6,7,8]
-    #partisions_size_l = [3,4,5,6,7,8]
+    
+    time_limit = '11:00:00'
+    partisions_size_l = [6, 7]
+    # partisions_size_l = [3,4,5]
     # partisions_size_l = [3,4,5,6,7,8, 9,11,12]
     # partisions_size_l = [5, 6, 7,8, 9]
     # partisions_size_l = [13, 14, 15]
@@ -217,16 +252,16 @@ if __name__ == '__main__':
 
 
     # n_nodes = [4, 2, 1]
-    n_nodes = [1]
+    n_nodes = [3]
     # n_nodes = [16]
 
     # n_workers_per_node = [4*3, 4*4, 4*5, 4*6, 4*7]
     # n_workers_per_node = [4*8, 4*10, 4*12, 4*14, 4*16]
-    n_workers_per_node = [6]
-    n_amount_of_gpus_in_node=[1]
+    n_workers_per_node = [-1]
+    n_amount_of_gpus_in_node=[0]
 
-    use_detached = False
-    # use_detached = True
+    # use_detached = False
+    use_detached = True
 
     python_file = 'gate_deletion_perf_measurement.py'
     # python_file = 'gate_deletion_perf_measurement_test.py'
@@ -241,11 +276,14 @@ if __name__ == '__main__':
                         for seed in seed_l:               
                             for num_multistarts in num_multistarts_l:
                                 for instantiator in instantiators:
-                                            create_and_run_a_job(cir_path,
+                                    
+                                    
+                                
+                                    create_and_run_a_job(cir_path,
                                                     partitions_size, python_file,
                                                     instantiator=instantiator,
                                                     num_multistarts=num_multistarts,
-                                                    seed=seed,
+                                                    seed=seed, time_limit=time_limit,
                                                     nodes=nodes,
                                                     workers_per_node=workers_per_node,
                                                     amount_of_gpus_per_node=amount_of_gpus_per_node,
