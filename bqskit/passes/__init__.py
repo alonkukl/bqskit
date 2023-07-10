@@ -119,6 +119,7 @@ are involved the qubit mapping process.
 
     CompressPass
     RecordStatsPass
+    RecordPartitionsStatsPass
     SetRandomSeedPass
     UnfoldPass
     UpdateDataPass
@@ -246,6 +247,7 @@ from bqskit.passes.util.log import LogErrorPass
 from bqskit.passes.util.log import LogPass
 from bqskit.passes.util.random import SetRandomSeedPass
 from bqskit.passes.util.record import RecordStatsPass
+from bqskit.passes.util.record_partitions_stats import RecordPartitionsStatsPass
 from bqskit.passes.util.unfold import UnfoldPass
 from bqskit.passes.util.update import UpdateDataPass
 
@@ -270,6 +272,7 @@ __all__ = [
     'QPredictDecompositionPass',
     'CompressPass',
     'RecordStatsPass',
+    'RecordPartitionsStatsPass',
     'SetRandomSeedPass',
     'UnfoldPass',
     'UpdateDataPass',

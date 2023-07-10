@@ -86,6 +86,17 @@ class QFactor_jax_batched_jit(Instantiater):
 
         return self.multi_start_instantiate(circuit, target, 1)
 
+    
+    
+    async def multi_start_instantiate_async(
+        self,
+        circuit: Circuit,
+        target: UnitaryLike | StateLike | StateSystemLike,
+        num_starts: int,
+    ) -> Circuit:
+        
+        return self.instantiate(circuit, target, num_starts)
+
     def multi_start_instantiate(
         self,
         circuit: Circuit,
@@ -268,7 +279,7 @@ def _initilize_circuit_tensor(
 
 
 def _single_sweep(
-    locations, gates, amount_of_gates, target_untry_builder,
+    locations, gates, amount_of_gates, target_untry_builder:UnitaryBuilderJax,
     untrys, beta=0
 ):
     # from right to left

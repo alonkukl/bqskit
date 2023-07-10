@@ -2763,6 +2763,144 @@ class Circuit(DifferentiableUnitary, StateVectorMap, Collection[Operation]):
 
         # Instantiate
         return instantiater.multi_start_instantiate(self, target, multistarts)
+    
+
+    async def instantiate_async(
+        self,
+        target: StateLike | UnitaryLike | StateSystem,
+        method: str | Instantiater | None = None,
+        multistarts: int = 1,
+        seed: int | None = None,
+        multistart_gen: MultiStartGenerator | None = None,
+        score_fn_gen: CostFunctionGenerator | None = None,
+        **kwargs: Any,
+    ) -> Circuit:
+        """
+        Instantiate the circuit with respect to a target state or unitary.
+
+        Attempts to change the parameters of the circuit such that the
+        circuit either implements the target unitary or maps the zero
+        state to the target state.
+
+        Args:
+            target (StateLike | UnitaryLike | StateSystem): The target unitary
+                or state. If a unitary is specified, the method changes
+                the circuit's parameters in an effort to get closer to
+                implementing the target. If a state is specified, the
+                method changes the circuit's parameters in an effort to
+                get closer to producing the target state when starting
+                from the zero state.
+
+            method (str | Instantiater | None): The method with which to
+                instantiate the circuit. Currently, `"qfactor"` and
+                `"minimization"` are supported. If left None, attempts to
+                pick best method. You can also pass an :class:`Instantiater`
+                directly through this.
+
+            multistarts (int): The number of starting points to sample
+                instantiation with. (Default: 1)
+
+            seed (int | None): The seed for any pseudo-random number generators
+                to use. Note that this is not guaranteed to make this method
+                reproducible.
+
+            multistart_gen (MultiStartGenerator): (Deprecated)
+
+            score_fn_gen (CostFunctionGenerator):  (Deprecated)
+
+            kwargs (dict[str, Any]): Method specific options, passed
+                directly to method constructor. For more info, see
+                `bqskit.ir.opt.instantiaters`.
+
+        Returns:
+            Circuit: A reference to `self` is returned
+
+        Raises:
+            ValueError: If `method` is invalid.
+
+            ValueError: If `circuit` is incompatible with any method.
+
+            ValueError: If `target` dimension doesn't match with circuit.
+
+            ValueError: If `multistarts` is not a positive integer.
+
+            ValueError: If `seed` is not an integer or `None`
+        """
+        if multistart_gen is not None or score_fn_gen is not None:
+            warnings.warn(
+                'Multistart handling has moved from the `circuit.instantiate`'
+                ' method to the Instantiater class. See'
+                ' `Instantiater.multi_start_instantiate` for more info. If you'
+                ' would like to override how starts are generated or'
+                ' instantiation results are processed, you should subclass'
+                ' an Instantiater. An Instantiatier object can be passed to'
+                ' `circuit.instantiate` through the `method` parameter. It'
+                ' can also be passed to most BQSKit compiler passes through'
+                " the `instantiate_options={'method':...} parameter. The use"
+                ' of `multistart_gen` and `score_fn_gen` parameters in'
+                ' `circuit.instantiate` is deprecated, and this warning'
+                ' will turn into an error in the future.',
+                DeprecationWarning,
+            )
+
+        # Set seed if specified
+        if seed is not None:
+            if not isinstance(seed, int):
+                raise ValueError(
+                    f'Expected seed to be an integer, got {type(seed)}.',
+                )
+            seed_random_sources(seed)
+
+        # Use given Instantiater if one is specified.
+        if isinstance(method, Instantiater):
+            instantiater = method
+            if not instantiater.is_capable(self):
+                raise ValueError(
+                    'Circuit cannot be instantiated using the '
+                    f'{method} method.'
+                    f'\n{instantiater.get_violation_report(self)}',
+                )
+
+        # Find best Instantiater if none specified
+        elif method is None:
+            err = ''
+            instantiater = None
+            for inst in instantiater_order:
+                inst_t = cast(Instantiater, inst)
+                if inst_t.is_capable(self):
+                    instantiater = inst_t(**kwargs)  # type: ignore
+                    break
+                err += inst_t.get_violation_report(self) + '\n'
+            if instantiater is None:
+                raise ValueError(f'No capable instantiater.\n{err}')
+
+        # If method is specified by name; match it
+        elif isinstance(method, str):
+            instantiater = None
+            for inst in instantiater_order:
+                inst_t = cast(Instantiater, inst)
+                if inst_t.get_method_name().lower() == method.lower():
+                    if not inst_t.is_capable(self):
+                        raise ValueError(
+                            'Circuit cannot be instantiated using the '
+                            f'{method} method.'
+                            f'\n{inst_t.get_violation_report(self)}',
+                        )
+                    instantiater = inst_t(**kwargs)  # type: ignore
+                    break
+            if instantiater is None:
+                raise ValueError(f'No such instantiatation method {method}.')
+
+        else:
+            raise TypeError(
+                'Expected a instantiater or name for method,'
+                f' got {type(method)}.',
+            )
+
+        instantiater = cast(Instantiater, instantiater)
+
+        # Instantiate
+        return await instantiater.multi_start_instantiate_async(self, target, multistarts)
 
     def minimize(self, cost: CostFunction, **kwargs: Any) -> None:
         """
